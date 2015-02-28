@@ -1,0 +1,8 @@
+C:\Users\Martin\Projects\VialF\VialF\bin\Debug\VialF.exe.config
+C:\Users\Martin\Projects\VialF\VialF\bin\Debug\VialF.XML
+C:\Users\Martin\Projects\VialF\VialF\bin\Debug\VialF.exe
+C:\Users\Martin\Projects\VialF\VialF\bin\Debug\VialF.pdb
+C:\Users\Martin\Projects\VialF\VialF\bin\Debug\FSharp.Core.dll
+C:\Users\Martin\Projects\VialF\VialF\bin\Debug\FSharp.Core.xml
+C:\Users\Martin\Projects\VialF\VialF\obj\Debug\VialF.exe
+C:\Users\Martin\Projects\VialF\VialF\obj\Debug\VialF.pdb
