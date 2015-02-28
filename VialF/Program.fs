@@ -1,5 +1,6 @@
 ﻿module Program
 
+open System
 open System.Diagnostics
 open Util
 
@@ -24,16 +25,15 @@ type Domain = {
 exception CompilerFailure of string
 
 
-let namedExternal : Def<Env.Path<Env.External>> -> (Name * Env.External) option =
+let namedExternal : Def<Env.Path<Env.Scope>> -> (Name * Env.Scope) option =
   function
-  | Def (name, RefLimit (path)) -> 
+  | Def (name, RefLimit (path)) | Def (name, ApplyLimit (path, _)) -> 
     match Env.findExternal path with
     | Some ext -> Some(name, ext)
-    | None -> None 
-  | _ -> None
+    | None -> None
 
 
-let bind : Def<Path<Name>> list -> Def<Key> list =
+let bind : Env.Scope -> Def<Path<Name>> list -> Def<Key> list =
 
   let externalizeDefs defs =
     let extLimit =
@@ -47,38 +47,28 @@ let bind : Def<Path<Name>> list -> Def<Key> list =
         Def (name, extLimit limit)
     in List.map extDef defs
 
-  let bindKeys defs =
+  let bindKeys scope defs =
     let namedExts = Map.ofList (List.concat (List.map optionList (List.map namedExternal defs)))
-    let keyOfPath = Env.keyOfPath (fun name -> Map.find name namedExts)
+    let keyOfPath = Env.keyOfPath scope (fun name -> Map.find name namedExts)
     let keyLimit =
         function
         | RefLimit path -> RefLimit (keyOfPath path)
         | ApplyLimit (path, args) -> 
             let pathKey = keyOfPath path
-            // now, we need to build
             let keyOfParam = fun paramPath ->
                 let paramName =
                   match paramPath with
                   | Env.LocalName name -> name
                   | _ -> raise (CompilerFailure (sprintf "In params position: %A" paramPath))
                 match pathKey with
-                | Env.LocalKey name -> Env.LocalKey paramName
-                | Env.ExternalKey (external, name) -> Env.ExternalKey (external, paramName)
+                | Env.Key (Env.LocalScope(_) , _) -> Env.Key (scope, paramName)
+                | Env.Key (Env.ExternalScope(_, _) as externalScope, _) -> Env.Key (externalScope, paramName)
             in ApplyLimit (pathKey, List.map (fun (a, b) -> (keyOfParam a, keyOfPath b)) args)
     let keyDef (Def(name, limit)) =
         Def (name, keyLimit limit)
     in List.map keyDef defs
 
-  fun defs -> bindKeys (externalizeDefs defs)
-
-// the next problem then is applylimits, e.g. we should be able to add stuff to exts so that it knows that it's the original + limits
-// but that's not really the purpose of external... is it? the external is more of the unique key for doing that,
-// what we need to do is rather to invent some sort of concept of environments... I'd say... we'll have to deal with more kinds
-// of limits and whatnot as well but... one thing at a time I say.
-
-// first we should change external into scope and do ExternalScope and LocalScope... this way the key is always a scope and a 
-// name... so should we pass in the local scope and build the scope keys as a hieararchy? maybe... well... we will have to pass in
-// the global scope... that might make some of the code reusable recursively... interesting...
+  fun scope defs -> bindKeys scope (externalizeDefs defs)
 
 [<EntryPoint>]
 let main argv = 
@@ -87,8 +77,9 @@ let main argv =
         Def ("a", RefLimit(Env.LocalName("eList")));
         Def ("eList", RefLimit(Env.ExternalAccess("List", "list")));
         Def ("eLength", RefLimit(Env.LocalAccess("eList", "length")));
-        Def ("dList", ApplyLimit(Env.ExternalAccess("List", "list"), [(Env.LocalName("element"),Env.LocalName("a"))]))]
-    let result = bind defs
+        Def ("dList", ApplyLimit(Env.ExternalAccess("List", "list"), [(Env.LocalName("element"),Env.LocalName("a"))]));
+        Def ("dLength", RefLimit(Env.LocalAccess("dList", "length")))]
+    let result = bind (Env.LocalScope ("/", Guid.NewGuid())) defs
     Debug.Print (sprintf "Defs:\n%A" defs)
     Debug.Print (sprintf "Result:\n%A\n" result)
     0 
