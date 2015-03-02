@@ -11,7 +11,7 @@ type Path<'E> =
 
 //type External = External of Name * Guid
 
-type ScopeKey = LocalScopeKey of String * Guid | ExternalScopeKey of Name * Guid
+type ScopeKey = LocalScopeKey of Name * Guid | ExternalScopeKey of Name * Guid
 
 type Key = Key of ScopeKey * Name
 
@@ -44,6 +44,24 @@ let rec lookup<'C> :Scope<'C> -> Key -> Option<'C> =
     | Some(c) as result -> result
     | None -> Option.bind (fun parentScope -> lookup scope key) scope.parent
 
+let rootScope<'C> :ScopeKey -> List<string * 'C> -> Scope<'C> =
+    fun key fields ->
+        { key = key;
+          parent = None;
+          content = Map.ofList (List.map (fun (name, c) -> (Key(key,name), c)) fields) } 
+let subScope<'C> :Scope<'C> -> ScopeKey -> List<string * 'C> -> Scope<'C> =
+    fun parent key fields ->
+        { key = key;
+          parent = Some(parent);
+          content = Map.ofList (List.map (fun (name, c) -> (Key(key,name), c)) fields) }  
+
+let scopeName<'C> :Option<Scope<'C>> -> string =
+    function
+    | None -> "/"
+    | Some(scope) -> 
+        match scope.key with
+        | LocalScopeKey (name, _) -> name
+        | ExternalScopeKey (name, _) -> "<" + name + ">"
 
 // type T<'C> = {
 //  keys :Map<Key, 'C>
