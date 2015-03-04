@@ -48,7 +48,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Util.fs" />
-    <Compile Include="Env.fs" />
+    <Compile Include="Scope.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
   </ItemGroup>

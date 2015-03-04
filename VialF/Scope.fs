@@ -32,7 +32,7 @@ let rec findExternal<'E> : Path<'E> -> Option<'E> =
 
 let scopeName :Option<Scope> -> string =
     function
-    | None -> "/"
+    | None -> ""
     | Some(scope) -> 
         match scope.key with
         | LocalScopeKey (name, _) -> name
