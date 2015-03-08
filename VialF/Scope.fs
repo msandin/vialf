@@ -44,7 +44,7 @@ let rec lookup : Scope -> Name -> Option<Key> =
     fun scope name -> 
         if Set.contains name scope.content
             then Some(Key(scope.key, name))
-            else Option.bind (fun parentScope -> lookup scope name) scope.parent
+            else Option.bind (fun parentScope -> lookup parentScope name) scope.parent
 
 let rec keyOfPath : Scope -> (Name -> ScopeKey) -> Path<ScopeKey> -> Key option =
     fun scope lookupExternal -> function

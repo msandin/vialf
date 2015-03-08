@@ -92,29 +92,26 @@ let rec bindLimit scope lookupExt =
             | Scope.Key (Scope.ExternalScopeKey(_, _) as externalScopeKey, _) -> Scope.Key (externalScopeKey, paramName)
         in SpecLimit (pathKey, List.map (function Arg (a, b) -> Arg (keyOfParam a, bindLimit scope lookupExt b)) args)
 
-let rec bindExpr = 
+let rec bindExpr name scope lookupExt = 
     function
-    | RefExpr path -> RefExpr (bindPath path)
+    | RefExpr path -> RefExpr (bindPath scope lookupExt path)
     | FunExpr (parameters, body) ->
-        FunExpr ([], bindExpr body)
-            // <-- but... we do want to introduce a new scope for this
-            // <-- honestly, we should probably recurse for this
+        let names = List.map (function Param(path, limit) -> nameOfPath path) parameters
+        // we really should put in a reference upwards here... but the data type doesn't have it.. it will though
+        let innerScope = Scope.makeScope (Some scope) name names
+        in FunExpr (bindParams innerScope lookupExt parameters, bindExpr name innerScope lookupExt body)
 
-and bindParameters name scope parameters =
-    // first we must make a new scope
-    let names = List.map fst parameters
-    let innerScope = Scope.makeScope (Some scope) name names
-//    let bindParameter parameter =
-//        function (path, )
-//    in List.map bindParameter parameters
-    in []
+and bindParams scope lookupExt parameters =
+    let bindParam =
+        function Param (path, limit) -> Param (bindPath scope lookupExt path, Option.map (bindLimit scope lookupExt) limit)
+    in List.map bindParam parameters
          
 
 let bindDefs scope defs =
     let namedExts = Map.ofList (List.concat (List.map Option.toList (List.map namedExternal defs)))
     let lookupExt name = Map.find name namedExts
     let keyDef (Def (path, limit, expr)) =
-        Def (bindPath scope lookupExt path, Option.map (bindLimit scope lookupExt) limit, None)
+        Def (bindPath scope lookupExt path, Option.map (bindLimit scope lookupExt) limit, Option.map (bindExpr (nameOfPath path) scope lookupExt) expr)
     in List.map keyDef defs
 
 let bind : Scope.Scope option -> Name -> Def<Path<Name>> list -> Def<Key> list =
@@ -134,7 +131,8 @@ let main argv =
         Def (Scope.LocalName("eList"), Some (EqLimit(Scope.ExternalAccess("List", "list"))), None);
         Def (Scope.LocalName("eLength"), Some (EqLimit(Scope.LocalAccess("eList", "length"))), None);
         Def (Scope.LocalName("dList"), Some (SpecLimit(Scope.ExternalAccess("List", "list"), [ Arg (Scope.LocalName("element"), EqLimit(Scope.LocalName("a")))])), None);
-        Def (Scope.LocalName("dLength"), Some (EqLimit(Scope.LocalAccess("dList", "length"))), None)]
+        Def (Scope.LocalName("dLength"), Some (EqLimit(Scope.LocalAccess("dList", "length"))), None);
+        Def (Scope.LocalName("b"), None, Some (FunExpr([Param(Scope.LocalName("a"),None)], RefExpr(Scope.LocalName("a")))))]
     let result = bind None "" defs
     Debug.Print (sprintf "Defs:\n%A" defs)
     Debug.Print (sprintf "Result:\n%A\n" result)
