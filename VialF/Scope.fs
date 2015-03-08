@@ -19,11 +19,6 @@ type Scope = {
     content :Set<Name>
 }
 
-let rec externalizePath : Path<Name> -> Path<ScopeKey> =
-    function
-    | LocalName name -> LocalName name
-    | LocalAccess (name, sub) -> LocalAccess (name, sub)
-    | ExternalAccess (extName, name) -> ExternalAccess (ExternalScopeKey (extName, Guid.NewGuid ()), name)
 
 let rec findExternal<'E> : Path<'E> -> Option<'E> =
     function

@@ -8,17 +8,19 @@ type Name = Scope.Name
 type Key = Scope.Key
 type Path<'I> = Scope.Path<'I>
 
+type Arg<'I> = Arg of 'I * Limit<'I>
 
-type Limit<'I> = 
+and Limit<'I> = 
     | EqLimit of 'I
-    | SpecLimit of 'I * ('I * 'I) list    
+    | SpecLimit of 'I * Arg<'I> list    
 
+type Param<'I> = Param of 'I * Limit<'I> option
 
 type Expr<'I> = 
     | RefExpr of 'I
-    | FunExpr of ('I * 'I) list * Expr<'I>
+    | FunExpr of Param<'I> list * Expr<'I>
 
-type Def<'I> = Def of Name * Limit<'I> option * Expr<'I> option
+type Def<'I> = Def of 'I * Limit<'I> option * Expr<'I> option
 
 type Compiled = Compiled
 
@@ -29,71 +31,95 @@ type Domain =
 exception CompilerFailure of string
 
 
+let nameOfPath =
+    function
+    | Scope.LocalName name -> name
+    | path -> raise (CompilerFailure (sprintf "In params position: %A" path))
+
 // externals
 let namedExternal : Def<Scope.Path<Scope.ScopeKey>> -> (Name * Scope.ScopeKey) option = 
     function 
-    | Def(name, Some(EqLimit(path)), _) | Def(name, Some(SpecLimit(path, _)), _) -> 
+    | Def(defPath, Some(EqLimit(path)), _) | Def(defPath, Some(SpecLimit(path, _)), _) -> 
         match Scope.findExternal path with
-        | Some ext -> Some(name, ext)
+        | Some ext -> Some(nameOfPath defPath, ext)
         | None -> None
     | _ -> None
 
-let extLimit = 
+
+let rec extPath : Path<Name> -> Path<Scope.ScopeKey> =
+    function
+    | Scope.LocalName name -> Scope.LocalName name
+    | Scope.LocalAccess (name, sub) -> Scope.LocalAccess (name, sub)
+    | Scope.ExternalAccess (extName, name) -> Scope.ExternalAccess (Scope.ExternalScopeKey (extName, Guid.NewGuid ()), name)
+
+let rec extLimit = 
     function 
-    | EqLimit path -> EqLimit(Scope.externalizePath path)
+    | EqLimit path -> EqLimit(extPath path)
     | SpecLimit(path, args) -> 
-        SpecLimit(Scope.externalizePath path, List.map (tupleApply Scope.externalizePath) args)
+        SpecLimit(
+            extPath path,
+            List.map (function Arg(a, b) -> Arg (extPath a, extLimit b)) args)
 
 let rec extExpr = 
     function 
-    | RefExpr path -> RefExpr(Scope.externalizePath path)
-    | FunExpr(parameters, body) -> FunExpr(List.map (tupleApply Scope.externalizePath) parameters, extExpr body)
+    | RefExpr path -> RefExpr(extPath path)
+    | FunExpr (parameters, body) ->
+        FunExpr(
+            List.map (function (Param (path, limit)) -> Param (extPath path, Option.map extLimit limit)) parameters,
+            extExpr body)
 
 let extDefs =            
-    let extDef (Def(name, limit, expr)) =
-        Def(name, Option.map extLimit limit, Option.map extExpr expr)
+    let extDef (Def(path, limit, expr)) =
+        Def(extPath path, Option.map extLimit limit, Option.map extExpr expr)
     List.map extDef 
 
 // bind
-let keyOfPath scope lookupExt path =
+let bindPath scope lookupExt path =
     match Scope.keyOfPath scope lookupExt path with
     | Some key -> key
     | None -> raise (CompilerFailure (sprintf "Not found: %A" path))
 
-let bindLimit scope lookupExt =
-    let keyOfPath = keyOfPath scope lookupExt
+let rec bindLimit scope lookupExt =
+    let keyOfPath = bindPath scope lookupExt
     function
     | EqLimit path -> EqLimit (keyOfPath path)
     | SpecLimit (path, args) -> 
         let pathKey = keyOfPath path
         let keyOfParam = fun paramPath ->
-            let paramName =
-                match paramPath with
-                | Scope.LocalName name -> name
-                | _ -> raise (CompilerFailure (sprintf "In params position: %A" paramPath))
+            let paramName = nameOfPath paramPath
             match pathKey with
             | Scope.Key (Scope.LocalScopeKey(_), _) -> Scope.Key (scope.key, paramName)
-            | Scope.Key (Scope.ExternalScopeKey(_, _) as externalScope, _) -> Scope.Key (externalScope, paramName)
-        in SpecLimit (pathKey, List.map (fun (a, b) -> (keyOfParam a, keyOfPath b)) args)
+            | Scope.Key (Scope.ExternalScopeKey(_, _) as externalScopeKey, _) -> Scope.Key (externalScopeKey, paramName)
+        in SpecLimit (pathKey, List.map (function Arg (a, b) -> Arg (keyOfParam a, bindLimit scope lookupExt b)) args)
 
 let rec bindExpr = 
     function
-    | RefExpr path -> RefExpr (keyOfPath path)
+    | RefExpr path -> RefExpr (bindPath path)
     | FunExpr (parameters, body) ->
         FunExpr ([], bindExpr body)
             // <-- but... we do want to introduce a new scope for this
             // <-- honestly, we should probably recurse for this
 
-and bindDefs scope defs =
+and bindParameters name scope parameters =
+    // first we must make a new scope
+    let names = List.map fst parameters
+    let innerScope = Scope.makeScope (Some scope) name names
+//    let bindParameter parameter =
+//        function (path, )
+//    in List.map bindParameter parameters
+    in []
+         
+
+let bindDefs scope defs =
     let namedExts = Map.ofList (List.concat (List.map Option.toList (List.map namedExternal defs)))
     let lookupExt name = Map.find name namedExts
-    let keyDef (Def(name, limit, expr)) =
-        Def (name, Option.map (bindLimit scope lookupExt) limit, None) // <-- None at this time, will use keyExpr
+    let keyDef (Def (path, limit, expr)) =
+        Def (bindPath scope lookupExt path, Option.map (bindLimit scope lookupExt) limit, None)
     in List.map keyDef defs
 
 let bind : Scope.Scope option -> Name -> Def<Path<Name>> list -> Def<Key> list =
     fun parentScope scopeName defs -> 
-        let scope = Scope.makeScope parentScope scopeName (List.map (function Def(name, _, _) -> name) defs)
+        let scope = Scope.makeScope parentScope scopeName (List.map (function Def(path, _, _) -> nameOfPath path) defs)
         in bindDefs scope (extDefs defs)
 
 // - well, refinement of existing roles (e.g. adding valueness or similar) is very much like 
@@ -104,11 +130,11 @@ let bind : Scope.Scope option -> Name -> Def<Path<Name>> list -> Def<Key> list =
 let main argv = 
 
     let defs : Def<Path<Name>> list = [
-        Def ("a", Some (EqLimit(Scope.LocalName("eList"))), None);
-        Def ("eList", Some (EqLimit(Scope.ExternalAccess("List", "list"))), None);
-        Def ("eLength", Some (EqLimit(Scope.LocalAccess("eList", "length"))), None);
-        Def ("dList", Some (SpecLimit(Scope.ExternalAccess("List", "list"), [(Scope.LocalName("element"),Scope.LocalName("a"))])), None);
-        Def ("dLength", Some (EqLimit(Scope.LocalAccess("dList", "length"))), None)]
+        Def (Scope.LocalName("a"), Some (EqLimit(Scope.LocalName("eList"))), None);
+        Def (Scope.LocalName("eList"), Some (EqLimit(Scope.ExternalAccess("List", "list"))), None);
+        Def (Scope.LocalName("eLength"), Some (EqLimit(Scope.LocalAccess("eList", "length"))), None);
+        Def (Scope.LocalName("dList"), Some (SpecLimit(Scope.ExternalAccess("List", "list"), [ Arg (Scope.LocalName("element"), EqLimit(Scope.LocalName("a")))])), None);
+        Def (Scope.LocalName("dLength"), Some (EqLimit(Scope.LocalAccess("dList", "length"))), None)]
     let result = bind None "" defs
     Debug.Print (sprintf "Defs:\n%A" defs)
     Debug.Print (sprintf "Result:\n%A\n" result)
