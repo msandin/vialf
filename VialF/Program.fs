@@ -14,13 +14,13 @@ and Limit<'I> =
     | EqLimit of 'I
     | SpecLimit of 'I * Arg<'I> list    
 
-type Param<'I> = Param of 'I * Limit<'I> option
+type Param<'I> = Param of 'I * 'I option * Limit<'I> option
 
 type Expr<'I> = 
     | RefExpr of 'I
     | FunExpr of Param<'I> list * Expr<'I>
 
-type Def<'I> = Def of 'I * Limit<'I> option * Expr<'I> option
+type Def<'I> = Def of 'I * 'I option * Limit<'I> option * Expr<'I> option
 
 type Compiled = Compiled
 
@@ -39,7 +39,7 @@ let nameOfPath =
 // externals
 let namedExternal : Def<Scope.Path<Scope.ScopeKey>> -> (Name * Scope.ScopeKey) option = 
     function 
-    | Def(defPath, Some(EqLimit(path)), _) | Def(defPath, Some(SpecLimit(path, _)), _) -> 
+    | Def(defPath, _, Some(EqLimit(path)), _) | Def(defPath, _, Some(SpecLimit(path, _)), _) -> 
         match Scope.findExternal path with
         | Some ext -> Some(nameOfPath defPath, ext)
         | None -> None
@@ -65,12 +65,12 @@ let rec extExpr =
     | RefExpr path -> RefExpr(extPath path)
     | FunExpr (parameters, body) ->
         FunExpr(
-            List.map (function (Param (path, limit)) -> Param (extPath path, Option.map extLimit limit)) parameters,
+            List.map (function (Param (path, _, limit)) -> Param (extPath path, None, Option.map extLimit limit)) parameters,
             extExpr body)
 
 let extDefs =            
-    let extDef (Def(path, limit, expr)) =
-        Def(extPath path, Option.map extLimit limit, Option.map extExpr expr)
+    let extDef (Def(path, _, limit, expr)) =
+        Def(extPath path, None, Option.map extLimit limit, Option.map extExpr expr)
     List.map extDef 
 
 // bind
@@ -96,27 +96,36 @@ let rec bindExpr name scope lookupExt =
     function
     | RefExpr path -> RefExpr (bindPath scope lookupExt path)
     | FunExpr (parameters, body) ->
-        let names = List.map (function Param(path, limit) -> nameOfPath path) parameters
-        // we really should put in a reference upwards here... but the data type doesn't have it.. it will though
+        let names = List.map (function Param(path, _, limit) -> nameOfPath path) parameters
         let innerScope = Scope.makeScope (Some scope) name names
         in FunExpr (bindParams innerScope lookupExt parameters, bindExpr name innerScope lookupExt body)
 
-and bindParams scope lookupExt parameters =
-    let bindParam =
-        function Param (path, limit) -> Param (bindPath scope lookupExt path, Option.map (bindLimit scope lookupExt) limit)
+// application expression are going to be a lot of fun, because it involves deciding the rules for chosing
+// the appropriate argument to bind to and that ultimately involves... hmmm.. can't really decide that here
+// because that involves looking stuff up which is impossible for externals... is this crucial to do here?
+// i'd like to say 'no' but i feel uncertain.
+
+
+and bindParams innerScope lookupExt parameters =
+    let bindParam (Param (path, outerPath, limit)) =
+        let pathName = nameOfPath path
+        in Param (
+            bindPath innerScope lookupExt path,
+            Option.bind (fun outerScope -> Scope.lookup outerScope pathName) innerScope.parent,
+            Option.map (bindLimit innerScope lookupExt) limit)
     in List.map bindParam parameters
          
 
 let bindDefs scope defs =
     let namedExts = Map.ofList (List.concat (List.map Option.toList (List.map namedExternal defs)))
     let lookupExt name = Map.find name namedExts
-    let keyDef (Def (path, limit, expr)) =
-        Def (bindPath scope lookupExt path, Option.map (bindLimit scope lookupExt) limit, Option.map (bindExpr (nameOfPath path) scope lookupExt) expr)
+    let keyDef (Def (path, _, limit, expr)) =
+        Def (bindPath scope lookupExt path, None, Option.map (bindLimit scope lookupExt) limit, Option.map (bindExpr (nameOfPath path) scope lookupExt) expr)
     in List.map keyDef defs
 
 let bind : Scope.Scope option -> Name -> Def<Path<Name>> list -> Def<Key> list =
     fun parentScope scopeName defs -> 
-        let scope = Scope.makeScope parentScope scopeName (List.map (function Def(path, _, _) -> nameOfPath path) defs)
+        let scope = Scope.makeScope parentScope scopeName (List.map (function Def(path, _, _, _) -> nameOfPath path) defs)
         in bindDefs scope (extDefs defs)
 
 // - well, refinement of existing roles (e.g. adding valueness or similar) is very much like 
@@ -127,12 +136,12 @@ let bind : Scope.Scope option -> Name -> Def<Path<Name>> list -> Def<Key> list =
 let main argv = 
 
     let defs : Def<Path<Name>> list = [
-        Def (Scope.LocalName("a"), Some (EqLimit(Scope.LocalName("eList"))), None);
-        Def (Scope.LocalName("eList"), Some (EqLimit(Scope.ExternalAccess("List", "list"))), None);
-        Def (Scope.LocalName("eLength"), Some (EqLimit(Scope.LocalAccess("eList", "length"))), None);
-        Def (Scope.LocalName("dList"), Some (SpecLimit(Scope.ExternalAccess("List", "list"), [ Arg (Scope.LocalName("element"), EqLimit(Scope.LocalName("a")))])), None);
-        Def (Scope.LocalName("dLength"), Some (EqLimit(Scope.LocalAccess("dList", "length"))), None);
-        Def (Scope.LocalName("b"), None, Some (FunExpr([Param(Scope.LocalName("a"),None)], RefExpr(Scope.LocalName("a")))))]
+        Def (Scope.LocalName("a"), None, Some (EqLimit(Scope.LocalName("eList"))), None);
+        Def (Scope.LocalName("eList"), None, Some (EqLimit(Scope.ExternalAccess("List", "list"))), None);
+        Def (Scope.LocalName("eLength"), None, Some (EqLimit(Scope.LocalAccess("eList", "length"))), None);
+        Def (Scope.LocalName("dList"), None, Some (SpecLimit(Scope.ExternalAccess("List", "list"), [ Arg (Scope.LocalName("element"), EqLimit(Scope.LocalName("a")))])), None);
+        Def (Scope.LocalName("dLength"), None, Some (EqLimit(Scope.LocalAccess("dList", "length"))), None);
+        Def (Scope.LocalName("b"), None, None, Some (FunExpr([Param(Scope.LocalName("a"), None, None)], RefExpr(Scope.LocalName("a")))))]
     let result = bind None "" defs
     Debug.Print (sprintf "Defs:\n%A" defs)
     Debug.Print (sprintf "Result:\n%A\n" result)
