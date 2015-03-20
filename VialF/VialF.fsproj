@@ -49,6 +49,8 @@
   <ItemGroup>
     <Compile Include="Util.fs" />
     <Compile Include="Scope.fs" />
+    <Compile Include="Model.fs" />
+    <Compile Include="Bind.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
   </ItemGroup>

@@ -11,7 +11,7 @@ type Path<'E> =
 
 type ScopeKey = LocalScopeKey of Name * Guid | ExternalScopeKey of Name * Guid
 
-type Key = Key of ScopeKey * Name
+type Key = Key of ScopeKey * Name | SubKey of Key * Name
 
 type Scope = {
     key :ScopeKey
@@ -39,6 +39,11 @@ let makeScope :Scope option -> Name -> List<string> -> Scope =
         in { key = scopeKey;
              parent = parent;
              content = Set.ofList fields; }  
+
+//let subKey :Scope -> Name -> Key =    
+//    fun scope name ->
+//        LocalScopeKey ((scopeName scope) + name + "/", Guid.NewGuid ()) 
+
 
 let rec lookup : Scope -> Name -> Option<Key> = 
     fun scope name -> 
