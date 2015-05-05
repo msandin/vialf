@@ -70,6 +70,7 @@ let rec bindLimit scope lookupExt =
             match pathKey with
             | Scope.Key (Scope.LocalScopeKey(_), _) -> Scope.Key (scope.key, paramName)
             | Scope.Key (Scope.ExternalScopeKey(_, _) as externalScopeKey, _) -> Scope.Key (externalScopeKey, paramName)
+            | _ -> raise (BindFailure (sprintf "Subkey not allowed in param: %A" paramPath))
         in Model.SpecLimit (pathKey, List.map (function Model.Arg (a, b) -> Model.Arg (keyOfParam a, bindLimit scope lookupExt b)) args)
 
 let rec bindExpr name scope lookupExt = 

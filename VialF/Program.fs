@@ -5,6 +5,7 @@ open System.Diagnostics
 open Util
 
 type Name = Scope.Name
+type Key = Scope.Key
 type Path<'I> = Scope.Path<'I>
 //type Model.Def<'I> = Model.Model.Def<'I>
 
@@ -13,6 +14,35 @@ type Path<'I> = Scope.Path<'I>
 // - and applying constraints in a speclimit is very much related as well...
 
 // so... next up is.. something else again
+
+
+// signatures: for expressions
+// valueness: for  
+
+// scopes: can resolve sub-keys
+// so... we want to collect all the scopes and for each scope we want to keep track of the associated sub-scopes, e.g. we want to
+// build a scope tree... and an index...
+
+
+type ScopeNode = ScopeNode of Scope.Key * (Scope.Name * ScopeNode) list
+
+//let keyScopes =
+//    let scopeKeyScope =
+//        function 
+//        | Scope.LocalScopeKey (name, guid) -> Map.add name (ScopeNode ()) Map.empty
+//        | Scope.ExternalScopeKey (name, guid) -> Map.empty
+//    in function
+//    | Scope.Key
+
+//let limitScope :Model.Limit<Key> -> Map<Key, ScopeNode> =
+//    function
+//    | Model.EqLimit key -> 
+//    | Model.SpecLimit (key, args) -> 
+
+//let scopeNodes :Model.Def<Scope.Key> list -> (ScopeNode * Map<Scope.Key, ScopeNode>) list =
+    
+
+
 [<EntryPoint>]
 let main argv = 
 
@@ -27,4 +57,4 @@ let main argv =
     let result = Bind.bind None "" defs
     Debug.Print (sprintf "Defs:\n%A" defs)
     Debug.Print (sprintf "Result:\n%A\n" result)
-    0 
+    0
