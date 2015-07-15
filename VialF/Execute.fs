@@ -1,15 +1,18 @@
 ﻿module Execute
 
+type Tag = Tag of string
 
-type Args = (string * Exe) list
+type Args = (Tag * Exe) list
 
 and Exe = 
-    | DictCallExe of string * Args
-    | MethCallExe of Exe * string * Args
+    | DictCallExe of Tag * Args
+    | MethCallExe of Exe * Tag * Args
     | FuncCallExe of Exe * Args
     | ConstantExe of Val
     | FuncExe of Exe
     | RecExe of Args
+    // we need let, tags, conditionals
+    
 
 and Val = 
     | IntVal of int
@@ -17,15 +20,14 @@ and Val =
     | ObjVal of Dict * Val
     | RecVal of Rec
 
-and Dict = Map<string, Callable>
+and Dict = Map<Tag, Callable>
 
-and Env = {dict :Dict; values :Map<string, Val>}
+and Env = {dict :Dict; values :Map<Tag, Val>}
 
 and Callable = Env * Exe
 
-and Rec = (string * Val) list
+and Rec = (Tag * Val) list
 
-  
 exception ExeError 
 
 let rec call : Callable -> Rec -> Val =
