@@ -2,11 +2,15 @@
 
 open FParsec
 open CharParsers
+open Util
+
 
 // Tree
 //-//-//-//-//-//-//-//
+type Path = string list
+
 type Expr = 
-    | PathExpr of string
+    | PathExpr of Path
     | NumberExpr of string
 
 type Import = 
@@ -14,6 +18,7 @@ type Import =
 
 type Role = 
     { name : string
+      def : bool
       valueness : bool
       domainArgs : Domain list
       roleExpr : Expr option
@@ -24,8 +29,8 @@ and DomainBody =
       roles : Role list }
 
 and DomainExpr = 
-    | DomainLiteral of DomainBody
-    | DomainDummy
+    | DomainRef of Path
+    | DomainLiteral of DomainExpr option * DomainBody
 
 and Domain = 
     { name : string
@@ -38,62 +43,77 @@ type Source =
 
 // Parser
 //-//-//-//-//-//-//-//
-let lit s = pstring s
 
-let pId str = 
+exception ParseFailure 
+
+// combinators
+let maybe item str = (opt item |>> function None -> false | _ -> true) str
+
+// primitives
+
+let tok p = (p .>> spaces)  
+let tokS p = (p .>> spaces1)
+let id str = 
     (let isIdentifierFirstChar c = isLetter c || c = '_'
      let isIdentifierChar c = isLetter c || isDigit c || c = '_'
      many1Satisfy2L isIdentifierFirstChar isIdentifierChar "identifier") str
 
-let pItem item = spaces >>? item .>> spaces
-let pSemiItem item = (pItem item) .>> lit ";"
-let pSemiItems item str = many (pSemiItem item) str
-let pCommaSep str = (lit "," >>. spaces) str
-let pCommaItems item str = sepBy1 (pItem item) pCommaSep str
+// parsers
+
+let pLit token = tok (pstring token)
+let pLitS token = tokS (pstring token)
+
+let pId str = tok id str
+let pIdS str = tokS id str
+
+let pNumb str = tok (numberLiteral NumberLiteralOptions.None "number") str
+
+let pPath str = sepBy1 pId (pLit ".") str
+
+let pSemiItem item = item .>> pLit ";"
+let pSemiItems item = many (pSemiItem item)
+let pCommaItems item = sepBy1 item (pLit ",")
 
 // header
-let pNamespace s = (lit "namespace" >>. spaces1 >>. pId .>> spaces) s
-let pImport s = (lit "import" >>. spaces1 >>. pId .>> spaces |>> fun id -> { path = id }) s
+let pNamespace s = (pLitS "namespace" >>. pId) s
+let pImport s = (pLitS "import" >>. pId |>> fun id -> { path = id }) s
 let pHeader str = pipe2 (pSemiItem pNamespace) (pSemiItems pImport) (fun n is -> (n, is)) str
+
 // body
 let pExpr str = 
-    (spaces 
-     >>. ((numberLiteral NumberLiteralOptions.None "number" |>> (fun x -> NumberExpr x.String)) 
-          <|> (pId |>> (fun x -> PathExpr x)))) str
+    ((pNumb |>> (fun x -> NumberExpr x.String))  <|> (pPath |>> (fun x -> PathExpr x))) str
 
+let pRoleDef str = opt (pLit "::" >>. pExpr) str 
+let pValDef str = opt (pLit "=" >>. pExpr) str
 
-let pRoleDef str = opt (spaces >>? lit "::" >>. spaces >>. pExpr) str // why the difference?
-let pValDef str = opt (spaces >>? lit "=" >>. spaces >>. pExpr) str // to this?
-
-let rec pDomArgDef str = (pId .>> spaces .>> lit "=" .>> spaces .>>. pDomainExpr |>> fun (name, expr) -> {name=name; expr=expr}) str
-and pDomArgsDef str = opt (spaces >>? lit "=>" >>. spaces >>. pCommaItems pDomArgDef) str
-
-and pVal str = 
-    (opt (lit "val") |>> function 
-     | None -> false
-     | Some _ -> true) str
+let rec pDomArgDef str = (pId .>> pLit "=" .>>. pDomainExpr |>> fun (name, expr) -> {name=name; expr=expr}) str
+and pDomArgsDef str = opt (pLit "=>" >>. pCommaItems pDomArgDef) str
 
 and pRole str = 
-    (lit "role" >>. spaces1 >>. pVal .>> spaces .>>. pId .>>. pDomArgsDef .>>. pRoleDef .>>. pValDef |>> fun ((((valueness, name), dArgs), rDef), vDef) -> 
+    (maybe (pLitS "def") .>> pLitS "role" .>>. maybe (pLitS "val") .>>. pId .>>. pDomArgsDef .>>. pRoleDef .>>. pValDef |>> fun (((((def, valueness), name), dArgs), rDef), vDef) -> 
          { name = name
+           def = def
            valueness = valueness
            domainArgs = match dArgs with None -> [] | Some sdArg -> sdArg
            roleExpr = rDef
            valueExpr = vDef }) str
 
 and pDomainBody s = 
-    (((pSemiItems pDomain) .>>. (pSemiItems pRole)) |>> fun (domains, roles) -> 
+    (((many pDomain) .>>. (pSemiItems pRole)) |>> fun (domains, roles) -> 
          { domains = domains
            roles = roles }) s
 
-and pDomainExpr str = (lit "dex" >>% DomainDummy) str
+and pDomainExpr str = (pPath |>> DomainRef) str
 
-and pDomainLiteral str = (spaces >>? lit "{" >>. pDomainBody .>> spaces .>> lit "}" |>> DomainLiteral) str
+and pDomainLiteral str = (pLit "{" >>. pDomainBody .>> pLit "}") str
 
-and pDomainRight str = (pDomainLiteral <|> pSemiItem pDomainExpr) str
+and pDomainRightEnd str = ((pDomainLiteral |>> Some) <|> (pLit ";" |>> fun _ -> None)) str 
+
+and pDomainRight : CharStream<'a> -> Reply<DomainExpr> =
+    fun str -> ((opt pDomainExpr .>>. pDomainRightEnd) |>> function (None, None) -> raise ParseFailure |  (Some e, None) -> e | (e, Some body) -> DomainLiteral (e, body)) str
 
 and pDomain str = 
-    (lit "domain" >>. spaces1 >>. pId .>> spaces .>> lit "=" .>>. pDomainRight |>> fun (name, expr) -> 
+    (pLitS "domain" >>. pId .>> pLit "=" .>>. pDomainRight |>> fun (name, expr) -> 
          { name = name
            expr = expr }) str
 
@@ -101,13 +121,10 @@ let pBody = many (spaces >>? pDomain)
 
 // file
 let pVial = 
-    pipe2 pHeader pBody (fun (space, imports) domains -> 
+    pipe2 (spaces >>. pHeader) pBody (fun (space, imports) domains -> 
         { space = space
           imports = imports
-          domains = domains }) .>> spaces .>> eof
+          domains = domains }) .>> eof
 
 let parse str = run pVial str
 
-// next things to do is to
-// -) print
-// -) domain arguments to roles

@@ -1,0 +1,16 @@
+﻿
+namespace example;
+
+domain A = {
+  domain B = {
+	domain X = {}
+  }
+  domain C = {
+    domain D = B {
+	  domain Y = {}
+	}
+	domain E = D;
+	domain F = D.Y;
+  }
+  def role val r :: s = 3;
+}

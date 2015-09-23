@@ -1,0 +1,21 @@
+﻿
+namespace example;
+
+domain A = {
+  domain B = {
+	domain X = {
+	  domain Z1 = {}
+	}
+  }
+  domain C = B {
+    domain Y = B.X {
+		domain Z2 = {}
+	}
+	domain X = Y.Z1;
+  }
+}
+
+domain E = {
+  role a::b;
+
+}
