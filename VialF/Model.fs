@@ -16,7 +16,11 @@ module Location =
     let sameName :T -> T -> bool =
         fun a b -> (nameFromPath a.path) = (nameFromPath b.path) 
 
-type DomainExpr =
+type Binding<'a> = {
+    content :'a
+    prev :Binding<'a> option}
+
+and DomainExpr =
     | Domain of Domain
     | DomainLiteral of DomainExpr option * DomainBody
 
@@ -31,7 +35,8 @@ and DomainMember = {
 and Domain = {
     location :Location.T
     expr :DomainExpr 
-    body :DomainBody }
+    subs :Binding<Domain> list
+    roles: Role list }
 
 and Role = {
     location :Location.T }
@@ -39,18 +44,26 @@ and Role = {
 module DomainExprs =
 
     // extracts domains from expression
-    let rec extractDomains :DomainExpr -> Domain list =
+    let rec extractDomains :DomainExpr -> Binding<Domain> list =
         function
-        | Domain domain -> domain.body.domains
-        | DomainLiteral (innerExpr, body) ->
+        | Domain domain -> domain.subs
+        | DomainLiteral (innerExpr, body) ->            
             match Option.map extractDomains innerExpr with
-            | None -> body.domains
-            | Some innerDs -> List.append (List.filter (fun d -> not (List.exists (fun (bD :Domain) -> Location.sameName d.location bD.location) body.domains)) innerDs) body.domains 
+            | None -> List.map (fun domain -> {content=domain; prev=None}) (body.domains)
+            | Some innerBindings ->
+                let binding (sub :Domain) = {
+                    content=sub;
+                    prev=List.tryFind (fun x -> Location.sameName sub.location x.content.location) innerBindings}
+                let outerBindings = List.map binding body.domains
+                let isInOuter (binding :Binding<Domain>) = 
+                    List.exists (fun (outer :Binding<Domain>)  -> Location.sameName binding.content.location outer.content.location) outerBindings
+                let filteredInnerBindings = List.filter (fun inner -> not (isInOuter inner)) innerBindings
+                List.append filteredInnerBindings outerBindings
 
     // extract roles from expression
     let rec extractRoles :DomainExpr -> Role list =
         function
-        | Domain domain -> domain.body.roles
+        | Domain domain -> domain.roles
         | DomainLiteral (innerExpr, body) ->
             match Option.map extractRoles innerExpr with
             | None -> body.roles
@@ -58,11 +71,12 @@ module DomainExprs =
 
 
 module Domains = 
+
     type DomainScope = Scope.Scope<Domain>
 
     let lookupSubdomain  :Domain -> string -> Domain option =
         fun domain name ->
-            List.tryFind (fun sub -> (Location.nameFromPath sub.location.path) = name) domain.body.domains
+            Option.map (fun sub -> sub.content) (List.tryFind (fun sub -> (Location.nameFromPath sub.content.location.path) = name) domain.subs)
 
     let rec lookupPath :Domain -> Syntax.Path -> Domain option =
         fun root ->
@@ -95,7 +109,8 @@ module Domains =
             // with regards to binding stuff
             { location = loc
               expr = expr
-              body = { domains = DomainExprs.extractDomains expr; roles = DomainExprs.extractRoles expr } }
+              subs = DomainExprs.extractDomains expr
+              roles = DomainExprs.extractRoles expr }
 
     // bind a sequence of domains
     and bind :Location.T -> DomainScope -> Syntax.Domain list -> DomainScope =
