@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
+# Visual Studio 14
+VisualStudioVersion = 14.0.23107.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "VialF", "VialF\VialF.fsproj", "{91553838-C14B-41A8-995D-88F06ACF85E6}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Vial", "Vial\Vial.fsproj", "{E1DE3F2D-C5D1-408F-A000-25195D7E4B5C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{91553838-C14B-41A8-995D-88F06ACF85E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{91553838-C14B-41A8-995D-88F06ACF85E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{91553838-C14B-41A8-995D-88F06ACF85E6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1DE3F2D-C5D1-408F-A000-25195D7E4B5C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1DE3F2D-C5D1-408F-A000-25195D7E4B5C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1DE3F2D-C5D1-408F-A000-25195D7E4B5C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1DE3F2D-C5D1-408F-A000-25195D7E4B5C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

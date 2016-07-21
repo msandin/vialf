@@ -1,0 +1,40 @@
+﻿
+
+context H {
+	def z = 4;
+}
+
+context I = H; {
+	def main = print text:z;
+}
+
+context A {
+	
+	context X {
+		def c = 3;
+		def d = 5;
+	}
+	def a = 1; {
+		def y = X.d;
+	}
+	def b = 2;
+	def main = print text:X.c;
+
+}
+
+context List {
+	def element = 1;
+	def list = 2;
+}
+
+context B {
+	
+	def main = print text:A.a.y;
+
+}
+
+
+
+// def x
+// def xlist = List { element = x }.list  // how do we access the type of x? what do we name the List module? 
+

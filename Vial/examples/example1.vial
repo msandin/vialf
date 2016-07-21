@@ -1,0 +1,12 @@
+﻿context H {
+	def z = 4;
+}
+context A {
+	context I = H; {
+	}
+	def main = print text:H.z; // this doesn't work because... it tries to find the declaration of z, but it's only in the env... which means we really can't use the decl list for this purpose
+}
+context J = H; {
+	def main = print text:z; // which this doesn't
+}
+// comment at the end

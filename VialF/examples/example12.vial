@@ -1,6 +1,0 @@
-namespace example;
-
-domain A = {
-  def role val r => D = dex :: s = 3;
-}
-
